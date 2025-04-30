@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Write},
     net::TcpStream,
+    thread,
 };
 
 const HTTP_OK: &str = "HTTP/1.1 200 OK";
@@ -18,10 +19,12 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                println!("accepted new connection");
-                if let Err(e) = handle_connection(stream) {
-                    eprintln!("Error handling connection: {}", e);
-                }
+                let _ = thread::spawn(|| {
+                    println!("accepted new connection");
+                    if let Err(e) = handle_connection(stream) {
+                        eprintln!("Error handling connection: {}", e);
+                    }
+                });
             }
             Err(e) => {
                 println!("error: {}", e);
