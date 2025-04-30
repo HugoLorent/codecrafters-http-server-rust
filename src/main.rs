@@ -3,12 +3,13 @@ use std::net::TcpListener;
 use std::{
     collections::HashMap,
     env, fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
     thread,
 };
 
 const HTTP_OK: &str = "HTTP/1.1 200 OK";
+const HTTP_CREATED: &str = "HTTP/1.1 201 Created";
 const HTTP_NOT_FOUND: &str = "HTTP/1.1 404 Not Found";
 const HTTP_BAD_REQUEST: &str = "HTTP/1.1 400 Bad Request";
 const CONTENT_TYPE_PLAIN: &str = "Content-Type: text/plain";
@@ -57,6 +58,15 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
         }
     }
 
+    let mut body = Vec::new();
+    if let Some(content_length) = headers.get("content-length") {
+        if let Ok(length) = content_length.parse::<usize>() {
+            let mut buffer = vec![0; length];
+            reader.read_exact(&mut buffer)?;
+            body = buffer;
+        }
+    }
+
     let parts: Vec<&str> = request_line.split_whitespace().collect();
 
     let response = if parts.len() >= 3 {
@@ -67,7 +77,8 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
             ("GET", "/") => format!("{}{}{}{}", HTTP_OK, CRLF, CRLF, CRLF),
             ("GET", p) if p.starts_with("/echo/") => handle_echo_endpoint(p),
             ("GET", "/user-agent") => handle_user_agent_endpoint(&headers),
-            ("GET", p) if p.starts_with("/files") => handle_file_endpoint(path),
+            ("GET", p) if p.starts_with("/files") => handle_get_file_endpoint(path),
+            ("POST", p) if p.starts_with("/files") => handle_post_file_endpoint(path, &body),
             _ => format!("{}{}{}", HTTP_NOT_FOUND, CRLF, CRLF),
         }
     } else {
@@ -110,7 +121,7 @@ fn handle_user_agent_endpoint(headers: &HashMap<String, String>) -> String {
     }
 }
 
-fn handle_file_endpoint(path: &str) -> String {
+fn handle_get_file_endpoint(path: &str) -> String {
     let args: Vec<String> = env::args().collect();
     if args.len() <= 2 {
         return format!("{}{}{}", HTTP_BAD_REQUEST, CRLF, CRLF);
@@ -135,5 +146,25 @@ fn handle_file_endpoint(path: &str) -> String {
             )
         }
         Err(_) => format!("{}{}{}", HTTP_NOT_FOUND, CRLF, CRLF),
+    }
+}
+
+fn handle_post_file_endpoint(path: &str, content: &[u8]) -> String {
+    let args: Vec<String> = env::args().collect();
+    if args.len() <= 2 {
+        return format!("{}{}{}", HTTP_BAD_REQUEST, CRLF, CRLF);
+    }
+
+    let directory = &args[2];
+    let file_path = path.strip_prefix("/files/").unwrap_or("");
+    let full_path = format!("{}/{}", directory, file_path);
+
+    // Gérer les erreurs d'écriture
+    match fs::write(&full_path, content) {
+        Ok(_) => format!("{}{}{}", HTTP_CREATED, CRLF, CRLF),
+        Err(e) => {
+            eprintln!("Error writing file {}: {}", full_path, e);
+            format!("{}{}{}", HTTP_BAD_REQUEST, CRLF, CRLF)
+        }
     }
 }
