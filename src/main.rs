@@ -2,22 +2,24 @@ mod constants;
 mod handlers;
 mod request;
 mod response;
+mod thread_pool;
 
 use std::net::{TcpListener, TcpStream};
-use std::thread;
 
 use constants::HTTP_BAD_REQUEST;
 use handlers::{handle_echo, handle_get_file, handle_post_file, handle_user_agent};
 use request::Request;
 use response::Response;
+use thread_pool::ThreadPool;
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let pool = ThreadPool::new(5); // Create a thread pool with 5 worker threads
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                thread::spawn(|| {
+                pool.execute(|| {
                     println!("Accepted new connection");
                     if let Err(e) = handle_connection(stream) {
                         eprintln!("Error handling connection: {}", e);
