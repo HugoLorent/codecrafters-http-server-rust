@@ -2,14 +2,15 @@ mod constants;
 mod handlers;
 mod request;
 mod response;
+mod router;
 mod thread_pool;
 
 use std::net::{TcpListener, TcpStream};
 
 use constants::HTTP_BAD_REQUEST;
-use handlers::{handle_echo, handle_get_file, handle_post_file, handle_user_agent};
 use request::Request;
 use response::Response;
+use router::{handle_route, parse_route};
 use thread_pool::ThreadPool;
 
 fn main() {
@@ -41,14 +42,9 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
         }
     };
 
-    let response = match (request.method.as_str(), request.path.as_str()) {
-        ("GET", "/") => Response::new(constants::HTTP_OK),
-        ("GET", path) if path.starts_with("/echo/") => handle_echo(path),
-        ("GET", "/user-agent") => handle_user_agent(request.headers.get("user-agent")),
-        ("GET", path) if path.starts_with("/files/") => handle_get_file(path),
-        ("POST", path) if path.starts_with("/files/") => handle_post_file(path, &request.body),
-        _ => Response::new(constants::HTTP_NOT_FOUND),
-    };
+    // Router use
+    let route = parse_route(&request.method, &request.path);
+    let response = handle_route(route, &request);
 
     response.send(&mut stream)
 }

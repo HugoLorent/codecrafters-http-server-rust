@@ -6,11 +6,6 @@ use crate::constants::CONTENT_TYPE_PLAIN;
 use crate::constants::{HTTP_BAD_REQUEST, HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK};
 use crate::response::Response;
 
-pub fn handle_echo(path: &str) -> Response {
-    let echo_content = &path[6..]; // 6 = "/echo/".len()
-    Response::new(HTTP_OK).with_text_body(echo_content)
-}
-
 pub fn handle_user_agent(user_agent: Option<&String>) -> Response {
     match user_agent {
         Some(agent) => Response::new(HTTP_OK)
