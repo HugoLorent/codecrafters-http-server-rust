@@ -1,9 +1,12 @@
+// handlers.rs
 use std::env;
 use std::fs;
+use std::path::Path;
 
 use crate::constants::CONTENT_TYPE_OCTET_STREAM;
 use crate::constants::CONTENT_TYPE_PLAIN;
 use crate::constants::{HTTP_BAD_REQUEST, HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK};
+use crate::errors::{HttpError, Result};
 use crate::response::Response;
 
 pub fn handle_user_agent(user_agent: Option<&String>) -> Response {
@@ -16,38 +19,100 @@ pub fn handle_user_agent(user_agent: Option<&String>) -> Response {
 }
 
 pub fn handle_get_file(path: &str) -> Response {
-    let args: Vec<String> = env::args().collect();
-    if args.len() <= 2 {
-        return Response::new(HTTP_BAD_REQUEST);
-    }
-
-    let directory = &args[2];
-    let file_path = path.strip_prefix("/files/").unwrap_or("");
-    let full_path = format!("{}/{}", directory, file_path);
-
-    match fs::read(full_path) {
+    match get_file_internal(path) {
         Ok(content) => Response::new(HTTP_OK)
             .with_header("Content-Type", CONTENT_TYPE_OCTET_STREAM)
             .with_body(content),
-        Err(_) => Response::new(HTTP_NOT_FOUND),
+        Err(err) => {
+            eprintln!("Error handling GET file: {:?}", err);
+            match err {
+                HttpError::FileNotFound(_) => Response::new(HTTP_NOT_FOUND),
+                HttpError::PathTraversal(_) | HttpError::PermissionDenied(_) => {
+                    Response::new(HTTP_BAD_REQUEST)
+                }
+                _ => Response::new(HTTP_BAD_REQUEST),
+            }
+        }
     }
 }
 
-pub fn handle_post_file(path: &str, content: &[u8]) -> Response {
+fn get_file_internal(path: &str) -> Result<Vec<u8>> {
     let args: Vec<String> = env::args().collect();
     if args.len() <= 2 {
-        return Response::new(HTTP_BAD_REQUEST);
+        return Err(HttpError::DirectoryNotSpecified);
     }
 
-    let directory = &args[2];
+    let directory = Path::new(&args[2]);
     let file_path = path.strip_prefix("/files/").unwrap_or("");
-    let full_path = format!("{}/{}", directory, file_path);
 
-    match fs::write(&full_path, content) {
+    // Security against directory traversal
+    let target_path = directory.join(file_path);
+    let canonical_target = target_path.canonicalize().map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => HttpError::FileNotFound(target_path.to_path_buf()),
+        std::io::ErrorKind::PermissionDenied => {
+            HttpError::PermissionDenied(target_path.to_path_buf())
+        }
+        _ => HttpError::Io(e),
+    })?;
+
+    let canonical_dir = directory.canonicalize().map_err(HttpError::Io)?;
+
+    // Verify that the path is within the authorized directory
+    if !canonical_target.starts_with(&canonical_dir) {
+        return Err(HttpError::PathTraversal(format!(
+            "Path traversal attempt: {}",
+            target_path.display()
+        )));
+    }
+
+    fs::read(&canonical_target).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => HttpError::FileNotFound(canonical_target),
+        std::io::ErrorKind::PermissionDenied => HttpError::PermissionDenied(canonical_target),
+        _ => HttpError::Io(e),
+    })
+}
+
+pub fn handle_post_file(path: &str, content: &[u8]) -> Response {
+    match post_file_internal(path, content) {
         Ok(_) => Response::new(HTTP_CREATED),
-        Err(e) => {
-            eprintln!("Error writing file {}: {}", full_path, e);
+        Err(err) => {
+            eprintln!("Error handling POST file: {:?}", err);
             Response::new(HTTP_BAD_REQUEST)
         }
     }
+}
+
+fn post_file_internal(path: &str, content: &[u8]) -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() <= 2 {
+        return Err(HttpError::DirectoryNotSpecified);
+    }
+
+    let directory = Path::new(&args[2]);
+    let file_path = path.strip_prefix("/files/").unwrap_or("");
+
+    // Security against directory traversal
+    let target_path = directory.join(file_path);
+
+    // Create parent directories if needed
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(HttpError::Io)?;
+    }
+
+    let canonical_dir = directory.canonicalize().map_err(HttpError::Io)?;
+
+    // For files that don't exist yet, check the parent directory
+    // to ensure it's within the authorized directory
+    if let Some(parent) = target_path.parent() {
+        let canonical_parent = parent.canonicalize().map_err(HttpError::Io)?;
+
+        if !canonical_parent.starts_with(&canonical_dir) {
+            return Err(HttpError::PathTraversal(format!(
+                "Path traversal attempt: {}",
+                target_path.display()
+            )));
+        }
+    }
+
+    fs::write(&target_path, content).map_err(HttpError::Io)
 }

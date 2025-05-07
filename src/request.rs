@@ -1,3 +1,5 @@
+// request.rs
+use crate::errors::{HttpError, Result};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
@@ -10,16 +12,15 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn parse(stream: &mut TcpStream) -> std::io::Result<Self> {
+    pub fn parse(stream: &mut TcpStream) -> Result<Self> {
         let mut reader = BufReader::new(stream);
         let mut request_line = String::new();
-        reader.read_line(&mut request_line)?;
+        reader.read_line(&mut request_line).map_err(HttpError::Io)?;
 
         let parts: Vec<&str> = request_line.split_whitespace().collect();
         if parts.len() < 3 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid request",
+            return Err(HttpError::InvalidRequest(
+                "Request line must contain method, path and HTTP version".to_string(),
             ));
         }
 
@@ -30,27 +31,34 @@ impl Request {
         let mut headers = HashMap::new();
         loop {
             let mut header_line = String::new();
-            reader.read_line(&mut header_line)?;
+            reader.read_line(&mut header_line).map_err(HttpError::Io)?;
 
             if header_line.trim().is_empty() {
                 break;
             }
 
-            if let Some(idx) = header_line.find(':') {
-                let key = header_line[..idx].trim().to_lowercase().to_string();
-                let value = header_line[idx + 1..].trim().to_string();
-                headers.insert(key, value);
+            match header_line.find(':') {
+                Some(idx) => {
+                    let key = header_line[..idx].trim().to_lowercase().to_string();
+                    let value = header_line[idx + 1..].trim().to_string();
+                    headers.insert(key, value);
+                }
+                None => {
+                    return Err(HttpError::MalformedHeader(header_line));
+                }
             }
         }
 
         // Read body
         let mut body = Vec::new();
         if let Some(content_length) = headers.get("content-length") {
-            if let Ok(length) = content_length.parse::<usize>() {
-                let mut buffer = vec![0; length];
-                reader.read_exact(&mut buffer)?;
-                body = buffer;
-            }
+            let length = content_length
+                .parse::<usize>()
+                .map_err(|_| HttpError::InvalidContentLength(content_length.clone()))?;
+
+            let mut buffer = vec![0; length];
+            reader.read_exact(&mut buffer).map_err(HttpError::Io)?;
+            body = buffer;
         }
 
         Ok(Self {
