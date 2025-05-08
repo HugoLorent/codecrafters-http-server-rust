@@ -1,6 +1,6 @@
 // router.rs
 use crate::constants;
-use crate::handlers::{handle_get_file, handle_post_file, handle_user_agent};
+use crate::handlers::{handle_echo, handle_get_file, handle_post_file, handle_user_agent};
 use crate::request::Request;
 use crate::response::Response;
 
@@ -27,7 +27,7 @@ pub fn parse_route(method: &str, path: &str) -> Route {
 pub fn handle_route(route: Route, request: &Request) -> Response {
     match route {
         Route::Root => Response::new(constants::HTTP_OK),
-        Route::Echo(content) => Response::new(constants::HTTP_OK).with_text_body(&content),
+        Route::Echo(content) => handle_echo(&content, request.headers.get("accept-encoding")),
         Route::UserAgent => handle_user_agent(request.headers.get("user-agent")),
         Route::GetFile(path) => handle_get_file(&path),
         Route::PostFile(path) => handle_post_file(&path, &request.body),

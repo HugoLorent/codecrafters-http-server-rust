@@ -9,6 +9,21 @@ use crate::constants::{HTTP_BAD_REQUEST, HTTP_CREATED, HTTP_NOT_FOUND, HTTP_OK};
 use crate::errors::{HttpError, Result};
 use crate::response::Response;
 
+pub fn handle_echo(content: &str, accept_encoding: Option<&String>) -> Response {
+    match accept_encoding {
+        Some(header) => {
+            let response = Response::new(HTTP_OK);
+            if header == "gzip" {
+                return response
+                    .with_header("Content-Encoding", "gzip")
+                    .with_text_body(content);
+            }
+            response.with_text_body(content)
+        }
+        None => Response::new(HTTP_OK).with_text_body(content),
+    }
+}
+
 pub fn handle_user_agent(user_agent: Option<&String>) -> Response {
     match user_agent {
         Some(agent) => Response::new(HTTP_OK)
