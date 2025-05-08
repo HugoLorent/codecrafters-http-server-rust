@@ -1,38 +1,50 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/1ad53d6a-4f1e-4f12-9097-e8858a413920)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# Rust HTTP Server
 
-This is a starting point for Rust solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+A lightweight HTTP server implementation built in Rust as part of the [CodeCrafters Build Your Own HTTP Server](https://codecrafters.io/challenges/http-server) challenge.
 
-[HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol) is the
-protocol that powers the web. In this challenge, you'll build a HTTP/1.1 server
-that is capable of serving multiple clients.
+## Features
 
-Along the way you'll learn about TCP servers,
-[HTTP request syntax](https://www.w3.org/Protocols/rfc2616/rfc2616-sec5.html),
-and more.
+- HTTP/1.1 compliant server with support for persistent connections
+- Thread pool for handling concurrent requests
+- File operations (GET/POST) with directory traversal protection
+- Gzip compression support
+- Echo and user-agent endpoints
+- Proper error handling with custom error types
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+## Architecture
 
-# Passing the first stage
+The server is organized into modular components:
 
-The entry point for your HTTP server implementation is in `src/main.rs`. Study
-and uncomment the relevant code, and push your changes to pass the first stage:
+- `main.rs`: Entry point with connection handling and persistent connection logic
+- `request.rs`: HTTP request parsing
+- `response.rs`: HTTP response construction
+- `router.rs`: Request routing to appropriate handlers
+- `handlers.rs`: Endpoint implementations (echo, user-agent, file operations)
+- `thread_pool.rs`: Worker thread pool for request processing
+- `errors.rs`: Custom error types and error handling
+- `constants.rs`: HTTP status codes and content types
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+## Technical Implementation
 
-Time to move on to the next stage!
+- Built with pure Rust and minimal dependencies
+- Uses standard library networking primitives
+- Thread pool implementation for concurrency
+- Secure file handling with path canonicalization to prevent directory traversal attacks
+- Support for gzip compression using the `flate2` crate
 
-# Stage 2 & beyond
+## Learning Objectives
 
-Note: This section is for stages 2 and beyond.
+This project was created as a learning exercise to deepen understanding of:
 
-1. Ensure you have `cargo (1.85)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+- HTTP protocol implementation details
+- Network programming in Rust
+- Concurrent programming with thread pools
+- Proper error handling in networked applications
+- Safe file system operations
+
+## Usage
+
+To run the server:
+
+```bash
+cargo run -- <directory>
