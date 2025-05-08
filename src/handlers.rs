@@ -1,6 +1,9 @@
 // handlers.rs
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use crate::constants::CONTENT_TYPE_OCTET_STREAM;
@@ -16,9 +19,14 @@ pub fn handle_echo(content: &str, accept_encoding: Option<&String>) -> Response 
             let encodings: Vec<&str> = header.split(",").map(|header| header.trim()).collect();
             let gzip = encodings.iter().find(|&header| *header == "gzip");
             if let Some(_gzip) = gzip {
+                let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+                encoder.write_all(content.as_bytes()).unwrap();
+                let compressed_content = encoder.finish().unwrap();
+
                 return response
                     .with_header("Content-Encoding", "gzip")
-                    .with_text_body(content);
+                    .with_header("Content-Type", CONTENT_TYPE_PLAIN)
+                    .with_body(compressed_content);
             }
             response.with_text_body(content)
         }
