@@ -13,7 +13,9 @@ pub fn handle_echo(content: &str, accept_encoding: Option<&String>) -> Response 
     match accept_encoding {
         Some(header) => {
             let response = Response::new(HTTP_OK);
-            if header == "gzip" {
+            let encodings: Vec<&str> = header.split(",").map(|header| header.trim()).collect();
+            let gzip = encodings.iter().find(|&header| *header == "gzip");
+            if let Some(_gzip) = gzip {
                 return response
                     .with_header("Content-Encoding", "gzip")
                     .with_text_body(content);
