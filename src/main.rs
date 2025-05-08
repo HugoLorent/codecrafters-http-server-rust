@@ -46,17 +46,50 @@ fn main() {
 }
 
 fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
-    let request = match Request::parse(&mut stream) {
-        Ok(req) => req,
-        Err(e) => {
-            eprintln!("Error parsing request: {:?}", e);
-            return Response::new(HTTP_BAD_REQUEST).send(&mut stream);
+    // Configure a timeout for connection if necessary
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+
+    let mut keep_alive = true;
+
+    while keep_alive {
+        let request = match Request::parse(&mut stream) {
+            Ok(req) => req,
+            Err(e) => {
+                eprintln!("Error parsing request: {:?}", e);
+                Response::new(HTTP_BAD_REQUEST).send(&mut stream)?;
+                break;
+            }
+        };
+
+        // Determine if connection should stay open
+        keep_alive = should_keep_alive(&request);
+
+        // Router use
+        let route = parse_route(&request.method, &request.path);
+        let mut response = handle_route(route, &request);
+
+        // Add appropriate Connection header
+        if keep_alive {
+            response = response.with_header("Connection", "keep-alive");
+        } else {
+            response = response.with_header("Connection", "close");
         }
-    };
 
-    // Router use
-    let route = parse_route(&request.method, &request.path);
-    let response = handle_route(route, &request);
+        response.send(&mut stream)?;
 
-    response.send(&mut stream)
+        if !keep_alive {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+fn should_keep_alive(request: &Request) -> bool {
+    if let Some(connection) = request.headers.get("connection") {
+        return connection.to_lowercase() != "close";
+    }
+
+    // In HTTP/1.1, connections are persistents by default
+    true
 }
